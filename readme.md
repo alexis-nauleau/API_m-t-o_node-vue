@@ -55,3 +55,25 @@ backend/
   services/cache.js     cache en mémoire avec durée de vie
 ```
 
+## Dépendances
+
+
+|---|---|
+| express | Crée le serveur web et gère les routes (ici /meteo et la page d'accueil) |
+| cors | Autorise un site web d'une autre adresse (le futur front Vue sur le port 5173) à appeler l'API. Sans lui, le navigateur bloque les requêtes |
+| express-rate-limit | Limite le nombre de requêtes 
+
+Fonctions intégrées à Node.js, sans installation :
+
+| Outil | Rôle dans le projet |
+|---|---|
+| fetch | Envoie les requêtes à l'API Open-Meteo |
+| AbortSignal.timeout | Annule un appel qui dépasse 5 secondes |
+| node --watch | Relance le serveur à chaque sauvegarde en développement |
+| node:test | Prévu pour les tests automatisés, rien à installer |
+
+## Limitation de débit
+
+Chaque adresse IP peut faire 30 requêtes par minute sur /meteo. Au-delà, le serveur
+répond 429 (trop de requêtes) sans interroger Open-Meteo. Le compteur est en mémoire :
+il repart à zéro à chaque redémarrage du serveur.
