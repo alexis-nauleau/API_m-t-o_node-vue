@@ -1,17 +1,9 @@
-const express = require('express')
-const cors = require('cors')
-const meteoRouter = require('./routes/meteo')
+const { creerApp } = require('./app')
 
-const app = express()
-const PORT = process.env.PORT || 3002 
+const PORT = process.env.PORT || 3002 // 3002 : le projet budget utilise 3001
 
-// Pas de cookies ici : un CORS simple suffit
-app.use(cors({ origin: 'http://localhost:5173' }))
-
-
-app.use('/meteo', meteoRouter)
-
-app.listen(PORT, () => {
+creerApp().listen(PORT, () => {
+  console.log(`API météo démarrée sur le port ${PORT}`)
   console.log(`Accueil : http://localhost:${PORT}/`)
-
+  console.log(`Exemple : http://localhost:${PORT}/meteo?ville=Lyon`)
 })
