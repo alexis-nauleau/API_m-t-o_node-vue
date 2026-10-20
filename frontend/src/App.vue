@@ -1,47 +1,44 @@
 <script setup>
 import { ref } from 'vue'
+import RechercheVille from './components/RechercheVille.vue'
 import MeteoActuelle from './components/MeteoActuelle.vue'
 import PrevisionsJours from './components/PrevisionsJours.vue'
 
 const API = 'http://localhost:3002'
 
-const ville = ref('')
-const meteo = ref(null)
+// Ce qu'on affiche : { lieu, actuel, jours }. Le nom du lieu vient de la liste
+// de l'autocomplétion : /meteo?lat&lon ne renvoie que des coordonnées.
+const affichage = ref(null)
 const erreur = ref('')
 const chargement = ref(false)
 
-// Une réponse lente ne doit pas écraser une recherche plus récente
-let derniereRecherche = 0
+// Une réponse lente ne doit pas écraser un choix plus récent
+let dernierChoix = 0
 
-async function chercher() {
-  const nom = ville.value.trim()
-  if (nom.length < 2) {
-    erreur.value = 'Tape au moins 2 caractères.'
-    return
-  }
-
-  const numero = ++derniereRecherche
+async function chargerMeteo(ville) {
+  const numero = ++dernierChoix
   erreur.value = ''
   chargement.value = true
 
   try {
-    const res = await fetch(`${API}/meteo?ville=${encodeURIComponent(nom)}`)
+    const params = new URLSearchParams({ lat: ville.latitude, lon: ville.longitude })
+    const res = await fetch(`${API}/meteo?${params}`)
     const data = await res.json().catch(() => ({}))
 
-    if (numero !== derniereRecherche) return
+    if (numero !== dernierChoix) return
 
     if (!res.ok) {
       erreur.value = data.erreur || 'Une erreur est survenue.'
-      meteo.value = null
+      affichage.value = null
       return
     }
-    meteo.value = data
+    affichage.value = { lieu: ville, actuel: data.actuel, jours: data.jours }
   } catch (e) {
-    if (numero !== derniereRecherche) return
+    if (numero !== dernierChoix) return
     erreur.value = 'Serveur injoignable. Le backend est-il lancé ?'
-    meteo.value = null
+    affichage.value = null
   } finally {
-    if (numero === derniereRecherche) chargement.value = false
+    if (numero === dernierChoix) chargement.value = false
   }
 }
 </script>
@@ -50,29 +47,23 @@ async function chercher() {
   <main>
     <h1>Météo</h1>
 
-    <form class="recherche" @submit.prevent="chercher">
-      <input v-model="ville" class="champ" placeholder="Une ville…" />
-      <button type="submit" class="bouton" :disabled="chargement">Chercher</button>
-    </form>
+    <RechercheVille @choisir="chargerMeteo" />
 
     <p v-if="chargement" class="info">Chargement…</p>
     <p v-if="erreur" class="erreur">{{ erreur }}</p>
 
-    <!-- Le <template> regroupe deux composants sans ajouter de balise HTML -->
-    <template v-if="meteo">
-      <MeteoActuelle :lieu="meteo.lieu" :actuel="meteo.actuel" />
-      <PrevisionsJours :jours="meteo.jours" />
+    <template v-if="affichage">
+      <MeteoActuelle :lieu="affichage.lieu" :actuel="affichage.actuel" />
+      <PrevisionsJours :jours="affichage.jours" />
     </template>
   </main>
 </template>
 
-<!-- Style global (sans scoped) : s'applique à toute la page, y compris la classe .carte
-     utilisée par les deux composants -->
 <style>
 *,
 *::before,
 *::after {
-  box-sizing: border-box; /* padding et bordures comptés dans la largeur */
+  box-sizing: border-box;
 }
 body {
   margin: 0;
@@ -99,31 +90,6 @@ main {
 h1 {
   margin: 0 0 16px;
   font-size: 24px;
-}
-.recherche {
-  display: flex;
-  gap: 8px;
-}
-.champ {
-  flex: 1;
-  min-width: 0; /* un champ refuse de rétrécir sans ça, et déborde sur mobile */
-  padding: 10px;
-  border: 1px solid #dde0ea;
-  border-radius: 8px;
-  font-size: 16px; /* en dessous de 16 px, Safari sur iPhone zoome à la saisie */
-}
-.bouton {
-  padding: 10px 16px;
-  border: none;
-  border-radius: 8px;
-  background: #4db5ff;
-  color: white;
-  font-size: 16px;
-  cursor: pointer;
-}
-.bouton:disabled {
-  opacity: 0.6;
-  cursor: wait;
 }
 .info {
   color: #777;
