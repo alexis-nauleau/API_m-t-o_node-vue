@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { vraiFetch, reponseJson, demarrer } = require('../tests/aide')
+const { vraiFetch, reponseJson, demarrer } = require('./aide')
 
 const PREVISIONS = {
   current: { temperature_2m: 14.2, weather_code: 3, wind_speed_10m: 9.5 },

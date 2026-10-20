@@ -4,13 +4,14 @@ Application météo en deux parties : une API Node.js/Express qui sert de passer
 vers l'API Open-Meteo, et une interface Vue 3. On saisit une ville, on obtient la
 météo actuelle et les prévisions sur 7 jours.
 
-Projet d'apprentissage : pratiquer l'appel à une API externe, la validation des
-entrées, le cache, la gestion d'erreurs et les tests automatisés.
+
 
 ## Objectif
 
-- Appeler une API externe depuis un serveur Node (et non depuis le navigateur)
+- Appeler une API externe depuis un serveur Node 
 - Enchaîner deux appels : géocodage (nom de ville vers coordonnées), puis prévisions
+- Proposer des villes à mesure que l'on tape (route /villes), en écartant les
+  résultats qui ne sont pas des lieux habités
 - Mettre en cache les réponses pour limiter les appels et accélérer le service
 - Renvoyer un format de réponse indépendant du fournisseur
 - Gérer proprement les erreurs (entrée invalide, ville inconnue, API en panne)
@@ -26,19 +27,10 @@ entrées, le cache, la gestion d'erreurs et les tests automatisés.
 
 ## Source des données
 
-Les données viennent de [Open-Meteo](https://open-meteo.com), utilisée sans clé
-d'API dans le cadre d'un projet non commercial :
-
 - Géocodage : `https://geocoding-api.open-meteo.com/v1/search`
 - Prévisions : `https://api.open-meteo.com/v1/forecast`
 
-Open-Meteo s'appuie sur des modèles de services météorologiques nationaux.
-Consulte leurs [conditions d'utilisation](https://open-meteo.com/en/terms) avant
-tout usage autre que personnel ou pédagogique.
-
 ## Lancer le projet
-
-Prérequis : Node.js installé. Il faut deux terminaux.
 
 Backend (http://localhost:3002) :
 
@@ -52,55 +44,46 @@ Frontend (http://localhost:5173) :
     npm install
     npm run dev
 
-Le backend n'autorise que l'origine http://localhost:5173 (CORS) : si Vite démarre
-sur un autre port, les appels seront bloqués.
 
 ## API
-
-### GET /meteo?ville=Lyon
-
-Exemple de réponse (valeurs d'illustration) :
-
-    {
-      "lieu": { "nom": "Lyon", "pays": "France", "latitude": 45.75, "longitude": 4.85 },
-      "actuel": { "temperature": 14.2, "vent": 9.5, "code": 3 },
-      "jours": [
-        { "date": "2026-10-20", "max": 17.1, "min": 8.4, "pluie": 0.0, "code": 3 }
-      ]
-    }
-
-Le champ code est un code météo WMO, traduit en texte et en icône par le front.
 
 ### Codes d'erreur
 
 | Statut | Signification |
 |---|---|
-| 400 | Nom de ville invalide (2 à 60 caractères) |
-| 404 | Ville introuvable |
-| 429 | Trop de requêtes (plus de 30 par minute) |
+| 400 | Paramètre invalide (ville de 2 à 60 caractères, q de 3 à 60, coordonnées hors plage) |
+| 404 | Ville introuvable (mode ville de /meteo) |
+| 429 | Trop de requêtes |
 | 502 | L'API Open-Meteo n'a pas répondu |
 
 ## Cache
 
 | Donnée | Durée |
 |---|---|
-| Coordonnées d'une ville | 24 h |
+| Coordonnées d'une ville (mode ville de /meteo) | 24 h |
 | Prévisions | 15 min |
+| Résultats de /villes | 1 h |
 
 Le cache est en mémoire : il est vidé à chaque redémarrage du serveur.
 
 ## Limitation de débit
 
-Chaque adresse IP peut faire 30 requêtes par minute sur /meteo. Au-delà, le serveur
-répond 429 sans interroger Open-Meteo. Le compteur est en mémoire : il repart à zéro
-à chaque redémarrage du serveur.
+Chaque adresse IP a sa propre limite par route et par minute :
+
+| Route | Requêtes par minute |
+|---|---|
+| /meteo | 30 |
+| /villes | 120 (l'autocomplétion envoie une requête à chaque pause de frappe) |
+
+Au-delà, le serveur répond 429 sans interroger Open-Meteo. Le compteur est en
+mémoire : il repart à zéro à chaque redémarrage du serveur.
 
 ## Tests
 
     cd backend
     npm test
 
-15 tests automatisés avec le module intégré node:test, sans dépendance à installer.
+24 tests automatisés avec le module intégré node:test, sans dépendance à installer.
 Les appels à Open-Meteo sont simulés : les tests sont rapides et fonctionnent sans
 Internet.
 
@@ -109,18 +92,24 @@ Internet.
 | cache.test.js | Lecture, expiration, taille maximale du cache |
 | openMeteo.test.js | Cache des villes et des prévisions, échecs non mémorisés, erreurs de l'API |
 | meteo.test.js | Réponses 200, 400, 404, 502 et 429 de la route /meteo |
+| villes.test.js | Filtrage, tri, 5 résultats maximum, minimum de 3 caractères, cache, 502, limiteur |
+| coordonnees.test.js | Mode lat et lon : réponse sans géocodage, coordonnées invalides refusées |
 
-Limite : les fausses réponses reproduisent le format attendu d'Open-Meteo. Si l'API
-change ses champs, les tests restent verts alors que l'appli casse. L'interface
-n'est pas testée.
+Le fichier tests/aide.js regroupe les outils partagés (démarrage d'un serveur de test,
+fausses réponses) : ce n'est pas un test.
+
+Limites : les fausses réponses reproduisent le format attendu d'Open-Meteo. Si l'API
+change ses champs, les tests restent verts alors que l'appli casse. L'interface n'est
+pas testée.
 
 ## Structure
 
     backend/
       index.js                  démarre le serveur
-      app.js                    construit l'application Express (routes, CORS, limiteur)
+      app.js                    construit l'application Express (routes, CORS, limiteurs)
       routes/meteo.js           route /meteo (validation, mise en forme de la réponse)
-      services/openMeteo.js     appels à l'API externe
+      routes/villes.js          route /villes (validation du texte tapé)
+      services/openMeteo.js     appels à l'API externe (villes, prévisions, recherche)
       services/cache.js         cache en mémoire avec durée de vie
       tests/                    tests automatisés
     frontend/
@@ -152,11 +141,33 @@ Fonctions intégrées à Node.js, sans installation :
 
 ## Limites connues
 
-- Le cache et le limiteur sont en mémoire : ils ne conviennent pas à plusieurs serveurs.
-- Seul le premier résultat du géocodage est retenu : une ville au nom très courant
-  peut renvoyer un lieu inattendu.
+- Le cache et les limiteurs sont en mémoire : ils ne conviennent pas à plusieurs serveurs.
+- L'interface cherche encore par nom de ville (premier résultat du géocodage) : une
+  ville au nom très courant peut renvoyer un lieu inattendu. L'autocomplétion, qui
+  enverra les coordonnées de la ville choisie, corrigera ce point.
 - L'icône ne distingue pas le jour de la nuit.
+- /meteo?lat&lon ne renvoie pas le nom du lieu.
 
 ## À venir
 
-- Autocomplétion du nom de ville, avec choix parmi plusieurs résultats, favoris
+- Autocomplétion dans l'interface : liste déroulante, délai avant envoi, annulation de
+  la requête précédente, navigation au clavier
+- Villes favorites, enregistrées dans le navigateur (localStorage)
+
+
+## Github
+mettre à jour sur la branche feat
+git add .
+git status
+git commit -m "feat: /meteo accepte des coordonnées, tests de /villes et des coordonnées"
+git push -u origin feat/meteo-coordonnees
+
+récupérer sur dev
+git switch dev
+git pull
+git branch
+git --no-pager log --oneline --graph --all -5
+
+supprimer feat
+git branch -d feat/meteo-coordonnees  (sur pc)
+git push origin --delete feat/coordonnees (sur github)
