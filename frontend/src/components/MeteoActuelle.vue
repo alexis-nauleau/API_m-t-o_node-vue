@@ -14,7 +14,7 @@ const condition = computed(() => decrire(props.actuel.code))
       {{ lieu.nom }}<span v-if="lieu.pays">, {{ lieu.pays }}</span>
     </h2>
     <div class="principal">
-      <!-- role="img" + aria-label : un lecteur d'écran lit le texte à la place de l'emoji -->
+
       <span class="icone" role="img" :aria-label="condition.texte">{{ condition.icone }}</span>
       <span class="temperature">{{ arrondir(actuel.temperature) }}°</span>
     </div>
