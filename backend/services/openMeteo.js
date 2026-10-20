@@ -1,57 +1,34 @@
-// ============================================================
-// À QUOI SERT CE FICHIER ?
-// C'est le seul endroit qui parle à l'API Open-Meteo (le service externe).
-// Les routes de ton serveur lui demandent des données sans savoir d'où
-// elles viennent, ni si elles sortent du cache.
-// ============================================================
 
-// On importe la classe Cache du fichier voisin (le "./" veut dire "même dossier").
-// Les accolades { } sélectionnent l'élément "Cache" exporté par cache.js.
 const { Cache } = require('./cache')
 
-// Les deux adresses de l'API. Il y en a deux car ce sont deux services :
-//   GEO_URL   : transforme un nom de ville en coordonnées GPS
-//   METEO_URL : donne la météo à partir de coordonnées GPS
-// On les écrit en MAJUSCULES : par convention, ce sont des constantes
-// (des valeurs qu'on ne change jamais).
 const GEO_URL = 'https://geocoding-api.open-meteo.com/v1/search'
 const METEO_URL = 'https://api.open-meteo.com/v1/forecast'
 
-// Deux caches avec deux durées de vie, car les données ne changent pas
+// Trois caches, avec trois durées de vie, car les données ne changent pas
 // au même rythme :
-//   villes     : 24 h (Lyon ne se déplace pas)
-//   prévisions : 15 min (la météo évolue, mais pas à la seconde)
-// Calcul : 24 heures x 60 minutes x 60 secondes x 1000 millisecondes.
+
 const cacheVilles = new Cache(24 * 60 * 60 * 1000)
 const cachePrevisions = new Cache(15 * 60 * 1000)
+const cacheRecherches = new Cache(60 * 60 * 1000)
 
-// ------------------------------------------------------------
-// appeler : fonction utilitaire qui télécharge une adresse et renvoie le JSON.
-// "async" signifie que la fonction attend des choses lentes (le réseau).
-// "await" met la fonction en pause jusqu'à la réponse, sans bloquer le serveur.
-// ------------------------------------------------------------
+
 async function appeler(url) {
-  // fetch envoie la requête à Internet.
-  // AbortSignal.timeout(5000) l'annule au bout de 5 secondes : sans ça, une API
-  // qui ne répond pas ferait attendre ta requête indéfiniment.
+
+  // AbortSignal.timeout(5000) l'annule au bout de 5 secondes : sans ça, une API qui ne répond pas ferait attendre ta requête indéfiniment.
   const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
 
   // res.ok vaut false si le serveur répond par une erreur (404, 500...).
   // "throw new Error" déclenche une erreur : la fonction s'arrête ici, et
-  // c'est le "catch" de routes/meteo.js qui la récupère.
+  // c'est le "catch" de la route qui la récupère.
   if (!res.ok) throw new Error(`API météo : statut ${res.status}`)
 
-  // .json() transforme le texte reçu en objet JavaScript utilisable.
   return res.json()
 }
-
-// ------------------------------------------------------------
 // chercherVille : nom de ville vers coordonnées GPS (avec cache).
-// ------------------------------------------------------------
 async function chercherVille(nom) {
-  // On fabrique la clé du cache. trim() enlève les espaces autour,
-  // toLowerCase() met en minuscules : "Lyon", "lyon" et " LYON "
-  // donnent tous la clé "lyon" et partagent donc la même entrée.
+  // Clé du cache : trim() enlève les espaces autour, toLowerCase() met en
+  // minuscules. "Lyon", "lyon" et " LYON " donnent la clé "lyon" et partagent
+  // donc la même entrée.
   const cle = nom.trim().toLowerCase()
 
   // 1. A-t-on déjà la réponse en mémoire ?
@@ -59,7 +36,7 @@ async function chercherVille(nom) {
   if (enCache) {
     // HIT = "touché" : la réponse était en cache, aucun appel à Internet.
     console.log(`géocodage "${cle}" : cache HIT`)
-    return enCache // on s'arrête là : la fonction renvoie directement la réponse
+    return enCache // la fonction s'arrête ici et renvoie la réponse
   }
 
   // MISS = "raté" : pas en cache, il faut interroger l'API.
@@ -111,7 +88,7 @@ async function previsions(latitude, longitude) {
   //   daily    : les valeurs par jour (max, min, pluie, code météo)
   //   timezone : 'auto' donne les dates dans le fuseau horaire du lieu
   // Le "code météo" est un nombre (0 = ciel dégagé, 61 = pluie...) que le
-  // front traduira en texte ou en icône.
+  // front traduit en texte et en icône.
   const params = new URLSearchParams({
     latitude,
     longitude,
@@ -128,7 +105,56 @@ async function previsions(latitude, longitude) {
   return data
 }
 
-// On exporte les deux fonctions pour que routes/meteo.js puisse les utiliser.
-// Les fonctions "appeler" et les caches restent privés : seuls ces deux
-// noms sont visibles de l'extérieur.
-module.exports = { chercherVille, previsions }
+// ------------------------------------------------------------
+// rechercherVilles : début de nom vers une LISTE de villes (autocomplétion).
+// Contrairement à chercherVille, elle renvoie plusieurs résultats, nettoyés.
+// ------------------------------------------------------------
+async function rechercherVilles(texte) {
+  const cle = texte.trim().toLowerCase()
+
+  const enCache = cacheRecherches.get(cle)
+  if (enCache) {
+    console.log(`recherche "${cle}" : cache HIT`)
+    return enCache
+  }
+  console.log(`recherche "${cle}" : cache MISS, appel à l'API`)
+
+  // On demande 10 résultats alors qu'on n'en gardera que 5 : certains seront
+  // écartés par le filtre ci-dessous (aéroports, îles...).
+  const params = new URLSearchParams({ name: texte, count: '10', language: 'fr' })
+  const data = await appeler(`${GEO_URL}?${params}`)
+
+  // "data.results ?? []" : si results n'existe pas, on prend une liste vide
+  // (un "?? []" évite que .filter plante sur undefined).
+  // Les .filter, .sort, .slice et .map s'enchaînent : chacun reçoit la liste
+  // produite par le précédent.
+  const villes = (data.results ?? [])
+    // .filter() garde les éléments qui respectent la condition.
+    // Le feature_code décrit le type de lieu : "PPL..." = lieu habité.
+    // On écarte les aéroports (AIRP), les îles (ISL), etc.
+    .filter((r) => r.feature_code?.startsWith('PPL'))
+    // .sort() trie. (b - a) trie du plus grand au plus petit : les villes les
+    // plus peuplées en premier. "?? 0" : sans population connue, on compte 0.
+    .sort((a, b) => (b.population ?? 0) - (a.population ?? 0))
+    // .slice(0, 5) garde les 5 premiers éléments.
+    .slice(0, 5)
+    // .map() transforme chaque élément. On ne garde que l'utile : l'API renvoie
+    // aussi, par exemple, plus de 250 codes postaux pour Lyon, inutiles ici.
+    .map((r) => ({
+      id: r.id, // identifiant unique du lieu, utile pour reconnaître un favori
+      nom: r.name,
+      region: r.admin1 ?? null, // ex : "Auvergne-Rhône-Alpes"
+      pays: r.country ?? null,
+      latitude: r.latitude,
+      longitude: r.longitude,
+    }))
+
+  // Une liste vide est une réponse valide ("aucune ville ne correspond") :
+  // on la mémorise aussi, contrairement à une erreur.
+  cacheRecherches.set(cle, villes)
+  return villes
+}
+
+// On exporte les trois fonctions pour que les routes puissent les utiliser.
+// "appeler" et les caches restent privés : seuls ces trois noms sont visibles.
+module.exports = { chercherVille, previsions, rechercherVilles }
