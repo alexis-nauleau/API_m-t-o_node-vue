@@ -105,17 +105,31 @@ pas testée.
 ## Structure
 
     backend/
-      index.js                  démarre le serveur
-      app.js                    construit l'application Express (routes, CORS, limiteurs)
-      routes/meteo.js           route /meteo (validation, mise en forme de la réponse)
-      routes/villes.js          route /villes (validation du texte tapé)
-      services/openMeteo.js     appels à l'API externe (villes, prévisions, recherche)
-      services/cache.js         cache en mémoire avec durée de vie
-      tests/                    tests automatisés
+      index.js                    démarre le serveur
+      app.js                      construit l'application Express (routes, CORS, limiteurs)
+      routes/meteo.js             route /meteo (par nom de ville ou par coordonnées)
+      routes/villes.js            route /villes (validation du texte tapé)
+      services/openMeteo.js       appels à l'API externe (villes, prévisions, recherche)
+      services/cache.js           cache en mémoire avec durée de vie
+      tests/                      tests automatisés
+        aide.js                   outils partagés (serveur de test, fausses réponses)
+        cache.test.js             cache
+        openMeteo.test.js         service Open-Meteo
+        meteo.test.js             route /meteo
+        coordonnees.test.js       /meteo avec lat et lon
+        ville.test.js             route /villes
     frontend/
-      src/App.vue               recherche et assemblage de l'écran
-      src/components/           météo actuelle, prévisions sur 7 jours
-      src/utils/meteo.js        codes météo (icône et texte), arrondis, dates
+      src/App.vue                 assemble l'écran : recherche, favoris, météo
+      src/components/
+        RechercheVilles.vue       autocomplétion (délai, annulation, clavier)
+        ListeFavoris.vue          villes favorites
+        MeteoActuelle.vue         météo actuelle, étoile, thème
+        PrevisionsJours.vue       prévisions sur 7 jours
+      src/composables/
+        useFavoris.js             lecture et écriture des favoris (localStorage)
+      src/utils/
+        meteo.js                  codes météo (icône et texte), arrondis, dates
+        themes.js                 thèmes par ville
 
 ## Dépendances
 
@@ -155,22 +169,113 @@ Fonctions intégrées à Node.js, sans installation :
 - Villes favorites, enregistrées dans le navigateur (localStorage)
 
 
-## Github
-mettre à jour sur la branche feat
-git add .
-git status
-git commit -m "feat: /meteo accepte des coordonnées, tests de /villes et des coordonnées"
-git push -u origin feat/meteo-coordonnees
 
-récupérer sur dev
-git switch dev
-git pull
-git branch
-git --no-pager log --oneline --graph --all -5
 
-supprimer feat
-git branch -d feat/meteo-coordonnees  (sur pc)
-git push origin --delete feat/coordonnees (sur github)
+
+## Workflow Git
+
+- **main** : la version stable. Elle ne reçoit que du code testé qui fonctionne.
+- **dev** : la branche d'intégration, où l'on rassemble et teste les nouveautés.
+- **feat/nom-de-la-fonctionnalite** : une branche par fonctionnalité, créée depuis dev.
+
+On ne travaille jamais directement sur main ou dev.
+
+
+### 1. Créer sa branche de travail
+
+    git switch dev
+    git pull
+    git status
+    git switch -c feat/ma-branche
+
+
+### 2. Enregistrer son travail
+
+    git branch
+    git add .
+    git status
+    git commit -m "feat: description courte de ce qui a changé"
+
+
+### 3. Envoyer sa branche sur GitHub
+
+    git push -u origin feat/ma-branche
+
+Le -u relie ta branche à GitHub :
+
+### 4. Fusionner la branche dans dev
+
+Méthode recommandée : la Pull Request sur GitHub. Elle laisse une trace visible.
+
+1. Onglet Pull requests, puis New pull request. 
+2. Règle les deux menus : base : dev (la branche qui reçoit) et
+   compare : feat/ma-branche.
+3. Create pull request, 
+4. Merge pull request, puis Confirm merge.
+
+Méthode en ligne de commande :
+
+    git switch dev
+    git pull
+    git merge feat/ma-branche
+    git push
+
+### 5. Supprimer la branche de travail
+
+    git switch dev
+    git pull
+    git branch -d feat/ma-branche
+    git push origin --delete feat/ma-branche
+    git fetch --prune
+    git branch -a
+
+- git branch -d (d minuscule) refuse de supprimer une branche qui n'a pas été
+- git branch -a ne doit plus lister ta branche, ni en local ni dans remotes/origin/.
+
+### 6. Fusionner dev dans main 
+
+    git switch dev
+    git pull
+    git status
+
+Vérifie d'abord que les tests passent et que l'application fonctionne. 
+
+    git fetch
+    git log --oneline main..dev
+    git log --oneline dev..main
+
+- La première commande liste les commits que main va gagner.
+- La seconde doit être vide. Si elle affiche quelque chose, main a avancé de son
+  côté : ne fusionne pas, demande de l'aide.
+
+Puis fusionne et publie :
+
+    git switch main
+    git pull
+    git merge --ff-only dev
+    git push
+    git switch dev
+
+--ff-only fait simplement avancer main jusqu'au dernier commit de dev. 
+
+Contrôle final : dev, main, origin/dev et origin/main doivent porter le même commit.
+
+    git log --oneline --graph --all -4
+
+### Fetch, pull et prune
+
+- git fetch : télécharge l'état de GitHub et met à jour les branches origin/...,
+  sans toucher à tes fichiers ni à tes branches. Sans risque.
+- git pull : git fetch, puis fusion dans la branche où tu te trouves.
+- git fetch --prune : comme fetch, et retire en plus les branches origin/...
+  qui ont été supprimées sur GitHub.
+
+### Règles à retenir
+
+1. Toujours git branch avant git add : l'étoile doit être sur ta branche de travail.
+2. Toujours relire git status avant de valider.
+3. On ne pousse jamais directement sur main : on passe par dev.
+4. Ne jamais utiliser git push --force ni git branch -D sans comprendre ce qu'ils effacent.
 
 ## Favoris, theme doudounette si ville ==Cremieu
 ## Thème par ville
