@@ -171,3 +171,47 @@ git --no-pager log --oneline --graph --all -5
 supprimer feat
 git branch -d feat/meteo-coordonnees  (sur pc)
 git push origin --delete feat/coordonnees (sur github)
+
+## Favoris, theme doudounette si ville ==Cremieu
+## Thème par ville
+
+Certaines villes ont une apparence particulière. Aujourd'hui, une seule règle existe :
+Crémieu (France) déclenche le thème Saint-Valentin. La carte météo devient rose avec
+des cœurs qui flottent, le texte passe au rouge, et la pastille de la ville dans les
+favoris prend un contour rose avec deux cœurs.
+
+Le thème se décide en un seul endroit (utils/themes.js). Les composants se contentent
+de l'appliquer : ils ne connaissent aucun nom de ville.
+
+Pour donner le thème à une autre ville, il suffit d'ajouter une ligne à la liste des
+règles (nom et pays en minuscules, sans accents) :
+
+    const REGLES = [
+      {
+        theme: 'doudounette',
+        villes: [
+          { nom: 'cremieu', pays: 'france' },
+          { nom: 'lyon', pays: 'france' },
+        ],
+      },
+    ]
+
+### Où le code réagit au thème
+
+| # | Fichier | Repère | Rôle |
+|---|---|---|---|
+| 1 | utils/themes.js | const REGLES | Seul endroit où le nom de la ville est écrit : la liste des villes qui ont un thème |
+| 2 | utils/themes.js | function themeDe | Compare le nom et le pays de la ville avec la liste, en ignorant accents et majuscules. Renvoie 'doudounette' ou null |
+| 3 | components/MeteoActuelle.vue | const theme = computed | Demande le thème de la ville affichée, et se recalcule quand la ville change |
+| 4 | components/MeteoActuelle.vue | :data-theme | Écrit l'attribut data-theme="doudounette" sur la carte (rien pour une autre ville) |
+| 5 | components/MeteoActuelle.vue | v-if="theme === 'doudounette'" | Crée les 6 cœurs décoratifs, ou aucun |
+| 6 | components/MeteoActuelle.vue | [data-theme='doudounette'] dans le style | Fond rose, texte rouge, couleurs de l'étoile |
+| 7 | components/MeteoActuelle.vue | .coeur, .c1 à .c6, @keyframes flotter | Position, taille et animation des cœurs |
+| 8 | components/ListeFavoris.vue | :data-theme et v-if="themeDe(v)" | Même mécanique pour la pastille du favori et ses deux cœurs |
+| 9 | components/ListeFavoris.vue | li[data-theme='doudounette'] dans le style | Contour rose épaissi, texte rouge |
+
+Les animations des cœurs sont coupées pour les personnes qui ont réglé « réduire les
+animations » dans leur système.
+
+Limite : le thème dépend du nom et du pays, pas de l'identifiant du lieu. Une autre
+ville qui porterait le même nom dans le même pays aurait aussi le thème.
