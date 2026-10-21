@@ -1,16 +1,23 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import RechercheVille from './components/RechercheVilles.vue'
+import ListeFavoris from './components/ListeFavoris.vue'
 import MeteoActuelle from './components/MeteoActuelle.vue'
 import PrevisionsJours from './components/PrevisionsJours.vue'
+import { useFavoris } from './composables/useFavoris'
 
 const API = 'http://localhost:3002'
 
+const { favoris, message, estFavori, basculer, retirer } = useFavoris()
+
 // Ce qu'on affiche : { lieu, actuel, jours }. Le nom du lieu vient de la liste
-// de l'autocomplétion : /meteo?lat&lon ne renvoie que des coordonnées.
+// de l'autocomplétion ou des favoris : /meteo?lat&lon ne renvoie que des coordonnées.
 const affichage = ref(null)
 const erreur = ref('')
 const chargement = ref(false)
+
+// La ville affichée est-elle dans les favoris ? Se met à jour toute seule
+const favoriActuel = computed(() => (affichage.value ? estFavori(affichage.value.lieu) : false))
 
 // Une réponse lente ne doit pas écraser un choix plus récent
 let dernierChoix = 0
@@ -49,11 +56,24 @@ async function chargerMeteo(ville) {
 
     <RechercheVille @choisir="chargerMeteo" />
 
+    <ListeFavoris
+      :favoris="favoris"
+      :actif="affichage?.lieu.id"
+      @choisir="chargerMeteo"
+      @retirer="retirer"
+    />
+
+    <p v-if="message" class="info">{{ message }}</p>
     <p v-if="chargement" class="info">Chargement…</p>
     <p v-if="erreur" class="erreur">{{ erreur }}</p>
 
     <template v-if="affichage">
-      <MeteoActuelle :lieu="affichage.lieu" :actuel="affichage.actuel" />
+      <MeteoActuelle
+        :lieu="affichage.lieu"
+        :actuel="affichage.actuel"
+        :favori="favoriActuel"
+        @basculer-favori="basculer(affichage.lieu)"
+      />
       <PrevisionsJours :jours="affichage.jours" />
     </template>
   </main>
