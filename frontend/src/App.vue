@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import RechercheVille from './components/RechercheVille.vue'
+import RechercheVille from './components/RechercheVilles.vue'
 import MeteoActuelle from './components/MeteoActuelle.vue'
 import PrevisionsJours from './components/PrevisionsJours.vue'
 
